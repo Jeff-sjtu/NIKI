@@ -4,6 +4,8 @@
 <div align="center">
 <img src="assets/niki_parkour1.gif" height="160"> <img src="assets/niki_parkour2.gif" height="160">
 
+<br>
+
 <a href="https://arxiv.org/abs/2305.08590">
     <img src='https://img.shields.io/badge/Paper-PDF-green?style=for-the-badge&logo=adobeacrobatreader&logoWidth=20&logoColor=white&labelColor=66cc00&color=94DD15' alt='Paper PDF'>
 </a>
@@ -25,6 +27,10 @@ In CVPR 2023
 
 <div align="center">
     <img src="assets/niki_compare.png", width="800" alt><br>
+    Different Inverse Kinematics Framework
+</div>
+<br>
+<div align="center">
     <img src="assets/niki_framework.png", width="800" alt><br>
 </div>
 
