@@ -1,0 +1,21 @@
+model_name: 'NIKITS'
+criterion_name: 'LossTS'
+exp_id: 'niki_ts'
+pretrained: ''
+pretrained_strict: False
+start_epoch: 0
+DATASET:
+  name: 'w_hp3d'
+  occlusion: True
+  train_paths:
+    - './data/annot/h36m_train_25fps_occ_smpl_db_xyz17new_add_cam_bbox_hrnetw48_pred_amb_sigma.pt'
+    - './data/annot/3dpw_train_occ_db_xyz17_uv24new_addcam_bbox_hrnetw48_pred_amb_sigma_adduv.pt'
+    - './data/annot/mpii3d_train_scale12_occ_db_add_cam_bbox_hrnetw48_pred_amb_sigma_adduv.pt'
+  valid_paths:
+    3dpw_xocc: './data/annot/3dpw_test_db_xyz17new_addcam_bbox_hrnetw48_pred_amb_sigma_adduv.pt'
+    h36m: './data/annot/h36m_test_front_25fps_tight_smpl_db_xyz17_filterednew_add_cam_hrnetw48_pred_sigma.pt'
+    3dpw: './data/annot/3dpw_test_db_xyz17new_addcam_hrnetw48_pred_sigma_adduv.pt'
+train_batch: 64
+num_workers: 8
+seq_len: 16
+learnable_emb: True
