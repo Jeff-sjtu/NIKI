@@ -10,7 +10,6 @@ class RealNVP(nn.Module):
         self.register_buffer('mask', mask)
         self.t = torch.nn.ModuleList([nett() for _ in range(len(mask))])
         self.s = torch.nn.ModuleList([nets() for _ in range(len(mask))])
-        # self.area = nn.Parameter(torch.ones(1))
 
     def _init(self):
         for m in self.t:
