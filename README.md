@@ -60,7 +60,11 @@ cd NIKI
 
 
 ## Models
-* Download our pretrained model from [[Google Drive](https://drive.google.com/file/d/1Gql6xLj1UEkTILn20VkECnm6qE_ntG8O/view?usp=sharing) | [Baidu](https://pan.baidu.com/s/1npIDjJQyTOKax1lBtG1D2A?pwd=z4iv) (code: `z4iv`)]
+* Download our pretrained model from [[Google Drive](https://drive.google.com/file/d/1Gql6xLj1UEkTILn20VkECnm6qE_ntG8O/view?usp=sharing) | [Baidu](https://pan.baidu.com/s/1npIDjJQyTOKax1lBtG1D2A?pwd=z4iv) (code: `z4iv`)].
+
+
+# Fetch data
+* Download parsed annotations from [[Google Drive](https://drive.google.com/drive/folders/1Ej-Sl8OE67tRlxzQBLEBVklHAObHcy-h?usp=sharing)].
 
 
 ## Train
