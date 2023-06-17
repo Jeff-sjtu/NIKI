@@ -230,109 +230,109 @@ prev_box = None
 renderer = None
 smpl_faces = torch.from_numpy(hybrik_model.smpl.faces.astype(np.int32))
 
-# idx = 0
-# print('### Run Model...')
-# for img_path in tqdm(img_path_list, dynamic_ncols=True):
-#     dirname = os.path.dirname(img_path)
-#     basename = os.path.basename(img_path)
+idx = 0
+print('### Run Model...')
+for img_path in tqdm(img_path_list, dynamic_ncols=True):
+    dirname = os.path.dirname(img_path)
+    basename = os.path.basename(img_path)
 
-#     with torch.no_grad():
-#         # Run Detection
-#         input_image = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
-#         det_input = det_transform(input_image).to(opt.gpu)
-#         det_output = det_model([det_input])[0]
+    with torch.no_grad():
+        # Run Detection
+        input_image = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
+        det_input = det_transform(input_image).to(opt.gpu)
+        det_output = det_model([det_input])[0]
 
-#         if prev_box is None:
-#             tight_bbox = get_one_box(det_output)  # xyxy
-#             if tight_bbox is None:
-#                 continue
-#         else:
-#             tight_bbox = get_max_iou_box(det_output, prev_box)  # xyxy
+        if prev_box is None:
+            tight_bbox = get_one_box(det_output)  # xyxy
+            if tight_bbox is None:
+                continue
+        else:
+            tight_bbox = get_max_iou_box(det_output, prev_box)  # xyxy
 
-#             area = (tight_bbox[2] - tight_bbox[0]) * (tight_bbox[3] - tight_bbox[1])
+            area = (tight_bbox[2] - tight_bbox[0]) * (tight_bbox[3] - tight_bbox[1])
 
-#             max_bbox = get_one_box(det_output)  # xyxy
-#             if max_bbox is not None:
-#                 max_area = (max_bbox[2] - max_bbox[0]) * (max_bbox[3] - max_bbox[1])
-#                 if area < max_area * 0.1:
-#                     tight_bbox = max_bbox
+            max_bbox = get_one_box(det_output)  # xyxy
+            if max_bbox is not None:
+                max_area = (max_bbox[2] - max_bbox[0]) * (max_bbox[3] - max_bbox[1])
+                if area < max_area * 0.1:
+                    tight_bbox = max_bbox
 
-#         prev_box = tight_bbox
+        prev_box = tight_bbox
 
-#         # Run HybrIK
-#         # bbox: [x1, y1, x2, y2]
-#         pose_input, bbox, img_center = transformation.test_transform(
-#             input_image, tight_bbox)
-#         pose_input = pose_input.to(opt.gpu)[None, :, :, :]
-#         pose_output = hybrik_model(
-#             pose_input, flip_test=opt.flip_test,
-#             bboxes=torch.from_numpy(np.array(bbox)).to(pose_input.device).unsqueeze(0).float(),
-#             img_center=torch.from_numpy(img_center).to(pose_input.device).unsqueeze(0).float()
-#         )
-#         uv_29 = pose_output.pred_uvd_jts.reshape(29, 3)[:, :2]
-#         transl = pose_output.transl.detach()
+        # Run HybrIK
+        # bbox: [x1, y1, x2, y2]
+        pose_input, bbox, img_center = transformation.test_transform(
+            input_image, tight_bbox)
+        pose_input = pose_input.to(opt.gpu)[None, :, :, :]
+        pose_output = hybrik_model(
+            pose_input, flip_test=opt.flip_test,
+            bboxes=torch.from_numpy(np.array(bbox)).to(pose_input.device).unsqueeze(0).float(),
+            img_center=torch.from_numpy(img_center).to(pose_input.device).unsqueeze(0).float()
+        )
+        uv_29 = pose_output.pred_uvd_jts.reshape(29, 3)[:, :2]
+        transl = pose_output.transl.detach()
 
-#         # === Save PT ===
-#         assert pose_input.shape[0] == 1, 'Only support single batch inference for now'
+        # === Save PT ===
+        assert pose_input.shape[0] == 1, 'Only support single batch inference for now'
 
-#         pred_xyz_jts_17 = pose_output.pred_xyz_jts_17.reshape(
-#             17, 3).cpu().data.numpy()
-#         pred_uvd_jts = pose_output.pred_uvd_jts.reshape(
-#             -1, 3).cpu().data.numpy()
-#         pred_xyz_jts_29 = pose_output.pred_xyz_jts_29.reshape(
-#             -1, 3).cpu().data.numpy()
-#         pred_xyz_jts_24_struct = pose_output.pred_xyz_jts_24_struct.reshape(
-#             24, 3).cpu().data.numpy()
-#         pred_scores = pose_output.maxvals.cpu(
-#         ).data[:, :29].reshape(29).numpy()
-#         pred_camera = pose_output.pred_camera.squeeze(
-#             dim=0).cpu().data.numpy()
-#         pred_betas = pose_output.pred_shape.squeeze(
-#             dim=0).cpu().data.numpy()
-#         pred_theta = pose_output.pred_theta_mats.squeeze(
-#             dim=0).cpu().data.numpy()
-#         pred_phi = pose_output.pred_phi.squeeze(dim=0).cpu().data.numpy()
-#         pred_cam_root = pose_output.cam_root.squeeze(dim=0).cpu().numpy()
-#         pred_sigma = pose_output.sigma.cpu().data.numpy()
+        pred_xyz_jts_17 = pose_output.pred_xyz_jts_17.reshape(
+            17, 3).cpu().data.numpy()
+        pred_uvd_jts = pose_output.pred_uvd_jts.reshape(
+            -1, 3).cpu().data.numpy()
+        pred_xyz_jts_29 = pose_output.pred_xyz_jts_29.reshape(
+            -1, 3).cpu().data.numpy()
+        pred_xyz_jts_24_struct = pose_output.pred_xyz_jts_24_struct.reshape(
+            24, 3).cpu().data.numpy()
+        pred_scores = pose_output.maxvals.cpu(
+        ).data[:, :29].reshape(29).numpy()
+        pred_camera = pose_output.pred_camera.squeeze(
+            dim=0).cpu().data.numpy()
+        pred_betas = pose_output.pred_shape.squeeze(
+            dim=0).cpu().data.numpy()
+        pred_theta = pose_output.pred_theta_mats.squeeze(
+            dim=0).cpu().data.numpy()
+        pred_phi = pose_output.pred_phi.squeeze(dim=0).cpu().data.numpy()
+        pred_cam_root = pose_output.cam_root.squeeze(dim=0).cpu().numpy()
+        pred_sigma = pose_output.sigma.cpu().data.numpy()
 
-#         img_size = np.array((input_image.shape[1], input_image.shape[0]))
-#         # print('img_size', img_size)
+        img_size = np.array((input_image.shape[1], input_image.shape[0]))
+        # print('img_size', img_size)
 
-#         img_feat = pose_output.img_feat.detach().cpu().numpy()
+        img_feat = pose_output.img_feat.detach().cpu().numpy()
 
-#         res_db['pred_xyz_17'].append(pred_xyz_jts_17)
-#         res_db['pred_uvd'].append(pred_uvd_jts)
-#         res_db['pred_xyz_29'].append(pred_xyz_jts_29)
-#         res_db['pred_xyz_24_struct'].append(pred_xyz_jts_24_struct)
-#         res_db['pred_scores'].append(pred_scores)
-#         res_db['pred_camera'].append(pred_camera)
-#         res_db['pred_sigma'].append(pred_sigma)
-#         res_db['f'].append(1000.0)
-#         res_db['pred_betas'].append(pred_betas)
-#         res_db['pred_thetas'].append(pred_theta)
-#         res_db['pred_phi'].append(pred_phi)
-#         res_db['pred_cam_root'].append(pred_cam_root)
-#         res_db['features'].append(img_feat)
-#         res_db['transl'].append(transl[0].cpu().data.numpy())
-#         res_db['bbox'].append(np.array(bbox))
-#         res_db['height'].append(img_size[1])
-#         res_db['width'].append(img_size[0])
-#         res_db['img_path'].append(img_path)
-#         res_db['img_sizes'].append(img_size)
+        res_db['pred_xyz_17'].append(pred_xyz_jts_17)
+        res_db['pred_uvd'].append(pred_uvd_jts)
+        res_db['pred_xyz_29'].append(pred_xyz_jts_29)
+        res_db['pred_xyz_24_struct'].append(pred_xyz_jts_24_struct)
+        res_db['pred_scores'].append(pred_scores)
+        res_db['pred_camera'].append(pred_camera)
+        res_db['pred_sigma'].append(pred_sigma)
+        res_db['f'].append(1000.0)
+        res_db['pred_betas'].append(pred_betas)
+        res_db['pred_thetas'].append(pred_theta)
+        res_db['pred_phi'].append(pred_phi)
+        res_db['pred_cam_root'].append(pred_cam_root)
+        res_db['features'].append(img_feat)
+        res_db['transl'].append(transl[0].cpu().data.numpy())
+        res_db['bbox'].append(np.array(bbox))
+        res_db['height'].append(img_size[1])
+        res_db['width'].append(img_size[0])
+        res_db['img_path'].append(img_path)
+        res_db['img_sizes'].append(img_size)
 
 
-# total_img = len(res_db['img_path'])
+total_img = len(res_db['img_path'])
 
-# for k in res_db.keys():
-#     try:
-#         v = np.stack(res_db[k], axis=0)
-#     except Exception:
-#         v = res_db[k]
-#         print(k, ' failed')
+for k in res_db.keys():
+    try:
+        v = np.stack(res_db[k], axis=0)
+    except Exception:
+        v = res_db[k]
+        print(k, ' failed')
 
-#     res_db[k] = v
+    res_db[k] = v
 
-# joblib.dump(res_db, 'vis_tmp.pt')
+joblib.dump(res_db, 'vis_tmp.pt')
 
 res_db = joblib.load('vis_tmp.pt')
 total_img = len(res_db['img_path'])
