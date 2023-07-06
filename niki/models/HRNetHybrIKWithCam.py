@@ -262,12 +262,10 @@ class HRNetSMPLCam(nn.Module):
 
         return scale
 
-    def forward(self, x, flip_test=False, **kwargs):
+    def forward(self, x, flip_test=False, do_hybrik=True, **kwargs):
         batch_size = x.shape[0]
 
-        # x0 = self.preact(x)
         out, x0 = self.preact(x)
-        # print(out.shape)
         out = out.reshape(batch_size, self.num_joints, self.depth_dim, self.height_dim, self.width_dim)
 
         if flip_test:
@@ -292,11 +290,8 @@ class HRNetSMPLCam(nn.Module):
 
         assert heatmaps.dim() == 3, heatmaps.shape
         # assert hypo_heatmaps.dim() == 4, heatmaps.shape
-        # print(hypo_heatmaps.shape)
 
         maxvals, _ = torch.max(heatmaps, dim=2, keepdim=True)
-
-        # print(out.sum(dim=2, keepdim=True))
         # heatmaps = out / out.sum(dim=2, keepdim=True)
 
         heatmaps = heatmaps.reshape((heatmaps.shape[0], self.num_joints, self.depth_dim, self.height_dim, self.width_dim))
@@ -306,13 +301,7 @@ class HRNetSMPLCam(nn.Module):
         hm_z0 = heatmaps.sum((3, 4))  # (B, K, D)
 
         range_tensor = torch.arange(hm_x0.shape[-1], dtype=torch.float32, device=hm_x0.device).unsqueeze(-1)
-        # hm_x = hm_x0 * range_tensor
-        # hm_y = hm_y0 * range_tensor
-        # hm_z = hm_z0 * range_tensor
 
-        # coord_x = hm_x.sum(dim=2, keepdim=True)
-        # coord_y = hm_y.sum(dim=2, keepdim=True)
-        # coord_z = hm_z.sum(dim=2, keepdim=True)
         coord_x = hm_x0.matmul(range_tensor)
         coord_y = hm_y0.matmul(range_tensor)
         coord_z = hm_z0.matmul(range_tensor)
@@ -406,7 +395,6 @@ class HRNetSMPLCam(nn.Module):
 
             camera_root = pred_xyz_jts_29[:, 0, :] * self.depth_factor
             camera_root[:, 2] += camDepth[:, 0, 0]
-        # camTrans = camera_root.squeeze(dim=1)[:, :2]
 
         # if not self.training:
         pred_xyz_jts_29 = pred_xyz_jts_29 - pred_xyz_jts_29[:, [0]]
@@ -415,6 +403,22 @@ class HRNetSMPLCam(nn.Module):
 
         pred_phi = pred_phi.reshape(batch_size, 23, 2)
 
+        if not do_hybrik:
+            output = edict(
+                pred_phi=pred_phi,
+                pred_shape=pred_shape,
+                pred_uvd_jts=pred_uvd_jts_29.reshape(batch_size, -1),
+                pred_xyz_jts_29=pred_xyz_jts_29_flat,
+                maxvals=maxvals,
+                cam_scale=camScale[:, 0],
+                cam_root=camera_root,
+                pred_camera=pred_camera,
+                sigma=sigma,
+                scores=1 - sigma,
+                img_feat=x0
+            )
+            return output
+    
         output = self.smpl.hybrik(
             pose_skeleton=pred_xyz_jts_29.type(self.smpl_dtype) * self.depth_factor,  # unit: meter
             betas=pred_shape.type(self.smpl_dtype),
@@ -453,231 +457,6 @@ class HRNetSMPLCam(nn.Module):
             pred_camera=pred_camera,
             sigma=sigma,
             scores=1 - sigma,
-            # uvd_heatmap=torch.stack([hm_x0, hm_y0, hm_z0], dim=2),
-            # uvd_heatmap=heatmaps,
             img_feat=x0
         )
-        return output
-
-    def forward_multiple(self, x, flip_test=False, **kwargs):
-        batch_size = x.shape[0]
-
-        # x0 = self.preact(x)
-        out, x0 = self.preact(x)
-        # print(out.shape)
-        out = out.reshape(batch_size, self.num_joints, self.depth_dim, self.height_dim, self.width_dim)
-
-        if flip_test:
-            flip_x = flip(x)
-            flip_out, flip_x0 = self.preact(flip_x)
-
-            # flip heatmap
-            flip_out = flip_out.reshape(batch_size, self.num_joints, self.depth_dim, self.height_dim, self.width_dim)
-            flip_out = self.flip_heatmap(flip_out)
-
-            out = out.reshape((out.shape[0], self.num_joints, -1))
-            flip_out = flip_out.reshape((flip_out.shape[0], self.num_joints, -1))
-
-            heatmaps = norm_heatmap(self.norm_type, out)
-            flip_heatmaps = norm_heatmap(self.norm_type, flip_out)
-            heatmaps = (heatmaps + flip_heatmaps) / 2
-
-            num_hypo = kwargs['num_hypo']
-            # merge_out = (flip_out + out) / 2
-            hypo_heatmaps = norm_heatmap('multiple_sampling', torch.log(heatmaps), sample_num=num_hypo)
-            # hypo_heatmaps = norm_heatmap('softmax', merge_out, sample_num=num_hypo)
-            hypo_heatmaps = hypo_heatmaps.reshape(batch_size, num_hypo, self.num_joints, -1)
-        else:
-            out = out.reshape((out.shape[0], self.num_joints, -1))
-
-            num_hypo = kwargs['num_hypo']
-            hypo_heatmaps = norm_heatmap('multiple_sampling', out, sample_num=num_hypo)
-
-        assert hypo_heatmaps.dim() == 4, hypo_heatmaps.shape
-
-        new_batch_size = batch_size * num_hypo
-        hypo_heatmaps = hypo_heatmaps.reshape((new_batch_size, self.num_joints, self.depth_dim, self.height_dim, self.width_dim))
-
-        # maxvals, _ = torch.max(hypo_heatmaps, dim=2, keepdim=True)
-
-        # print(out.sum(dim=2, keepdim=True))
-        # heatmaps = out / out.sum(dim=2, keepdim=True)
-
-        hm_x0 = hypo_heatmaps.sum((2, 3))  # (B, K, W)
-        hm_y0 = hypo_heatmaps.sum((2, 4))  # (B, K, H)
-        hm_z0 = hypo_heatmaps.sum((3, 4))  # (B, K, D)
-
-        range_tensor = torch.arange(hm_x0.shape[-1], dtype=torch.float32, device=hm_x0.device).unsqueeze(-1)
-        # hm_x = hm_x0 * range_tensor
-        # hm_y = hm_y0 * range_tensor
-        # hm_z = hm_z0 * range_tensor
-
-        # coord_x = hm_x.sum(dim=2, keepdim=True)
-        # coord_y = hm_y.sum(dim=2, keepdim=True)
-        # coord_z = hm_z.sum(dim=2, keepdim=True)
-        coord_x = hm_x0.matmul(range_tensor)
-        coord_y = hm_y0.matmul(range_tensor)
-        coord_z = hm_z0.matmul(range_tensor)
-
-        coord_x = coord_x / float(self.width_dim) - 0.5
-        coord_y = coord_y / float(self.height_dim) - 0.5
-        coord_z = coord_z / float(self.depth_dim) - 0.5
-
-        #  -0.5 ~ 0.5
-        pred_uvd_jts_29 = torch.cat((coord_x, coord_y, coord_z), dim=2)
-
-        x0 = x0.view(x0.size(0), -1)
-        init_shape = self.init_shape.expand(batch_size, -1)     # (B, 10,)
-        init_cam = self.init_cam.expand(batch_size, -1)  # (B, 1,)
-
-        xc = x0
-
-        delta_shape = self.decshape(xc)
-        pred_shape = delta_shape + init_shape
-        pred_phi = self.decphi(xc)
-        pred_camera = self.deccam(xc).reshape(batch_size, -1) + init_cam
-        sigma = self.decsigma(xc).reshape(batch_size, 29, 1).sigmoid()
-
-        pred_phi = pred_phi.reshape(batch_size, 23, 2)
-
-        if flip_test:
-
-            flip_delta_shape = self.decshape(flip_x0)
-            flip_pred_shape = flip_delta_shape + init_shape
-            flip_pred_phi = self.decphi(flip_x0)
-            flip_pred_camera = self.deccam(flip_x0).reshape(batch_size, -1) + init_cam
-            flip_sigma = self.decsigma(flip_x0).reshape(batch_size, 29, 1).sigmoid()
-
-            pred_shape = (pred_shape + flip_pred_shape) / 2
-
-            flip_pred_phi = flip_pred_phi.reshape(batch_size, 23, 2)
-            flip_pred_phi = self.flip_phi(flip_pred_phi)
-            pred_phi = (pred_phi + flip_pred_phi) / 2
-
-            pred_camera = 2 / (1 / flip_pred_camera + 1 / pred_camera)
-
-            flip_sigma = self.flip_sigma(flip_sigma)
-            sigma = (sigma + flip_sigma) / 2
-
-        camScale = pred_camera[:, :1].unsqueeze(1)
-        # camTrans = pred_camera[:, 1:].unsqueeze(1)
-
-        sigma = sigma[:, None, :, :].expand(batch_size, num_hypo, 29, 1)
-        pred_shape = pred_shape[:, None, :].expand(batch_size, num_hypo, 10)
-        pred_phi = pred_phi[:, None, :, :].expand(batch_size, num_hypo, 23, 2)
-        camScale = camScale[:, None, :, :].expand(batch_size, num_hypo, 1, 1)
-
-        sigma = sigma.reshape(new_batch_size, 29, 1)
-        pred_shape = pred_shape.reshape(new_batch_size, 10)
-        pred_phi = pred_phi.reshape(new_batch_size, 23, 2)
-        camScale = camScale.reshape(new_batch_size, 1, 1)
-
-        camScale = self.update_scale(
-            pred_uvd=pred_uvd_jts_29,
-            weight=1 - sigma * 5,
-            init_scale=camScale,
-            pred_shape=pred_shape,
-            pred_phi=pred_phi,
-            **kwargs)
-
-        camDepth = self.focal_length / (self.input_size * camScale + 1e-9)
-
-        pred_xyz_jts_29 = torch.zeros_like(pred_uvd_jts_29)
-        if 'bboxes' in kwargs.keys():
-            bboxes = kwargs['bboxes']
-            img_center = kwargs['img_center']
-
-            cx = (bboxes[:, 0] + bboxes[:, 2]) * 0.5
-            cy = (bboxes[:, 1] + bboxes[:, 3]) * 0.5
-            w = (bboxes[:, 2] - bboxes[:, 0])
-            h = (bboxes[:, 3] - bboxes[:, 1])
-
-            cx = cx - img_center[:, 0]
-            cy = cy - img_center[:, 1]
-            cx = cx / w
-            cy = cy / h
-
-            bbox_center = torch.stack((cx, cy), dim=1).unsqueeze(dim=1)
-            bbox_center = bbox_center[:, None, :, :].expand(batch_size, num_hypo, 1, 2)
-            bbox_center = bbox_center.reshape(new_batch_size, 1, 2)
-
-            pred_xyz_jts_29[:, :, 2:] = pred_uvd_jts_29[:, :, 2:].clone()  # unit: (self.depth_factor m)
-            pred_xy_jts_29_meter = ((pred_uvd_jts_29[:, :, :2] + bbox_center) * self.input_size / self.focal_length) \
-                * (pred_xyz_jts_29[:, :, 2:] * self.depth_factor + camDepth)  # unit: m
-
-            pred_xyz_jts_29[:, :, :2] = pred_xy_jts_29_meter / self.depth_factor  # unit: (self.depth_factor m)
-
-            camera_root = pred_xyz_jts_29[:, 0, :] * self.depth_factor
-            camera_root[:, 2] += camDepth[:, 0, 0]
-        else:
-            pred_xyz_jts_29[:, :, 2:] = pred_uvd_jts_29[:, :, 2:].clone()  # unit: (self.depth_factor m)
-            pred_xy_jts_29_meter = (pred_uvd_jts_29[:, :, :2] * self.input_size / self.focal_length) \
-                * (pred_xyz_jts_29[:, :, 2:] * self.depth_factor + camDepth)  # unit: m
-
-            pred_xyz_jts_29[:, :, :2] = pred_xy_jts_29_meter / self.depth_factor  # unit: (self.depth_factor m)
-
-            camera_root = pred_xyz_jts_29[:, 0, :] * self.depth_factor
-            camera_root[:, 2] += camDepth[:, 0, 0]
-        # camTrans = camera_root.squeeze(dim=1)[:, :2]
-
-        # if not self.training:
-        pred_xyz_jts_29 = pred_xyz_jts_29 - pred_xyz_jts_29[:, [0]]
-
-        pred_xyz_jts_29_flat = pred_xyz_jts_29.reshape(batch_size, num_hypo, -1)
-
-        # pred_phi = pred_phi.reshape(batch_size, 23, 2)
-
-        output = self.smpl.hybrik(
-            pose_skeleton=pred_xyz_jts_29.type(self.smpl_dtype) * self.depth_factor,  # unit: meter
-            betas=pred_shape.type(self.smpl_dtype),
-            phis=pred_phi.type(self.smpl_dtype),
-            global_orient=None,
-            return_verts=True
-        )
-        pred_vertices = output.vertices.float()
-        #  -0.5 ~ 0.5
-        pred_xyz_jts_24_struct = output.joints.float() / self.depth_factor
-        #  -0.5 ~ 0.5
-        pred_xyz_jts_17 = output.joints_from_verts.float() / self.depth_factor
-        pred_theta_mats = output.rot_mats.float().reshape(batch_size, num_hypo, 24 * 9)
-        pred_xyz_jts_24 = pred_xyz_jts_29[:, :24, :].reshape(batch_size, num_hypo, 72)
-        pred_xyz_jts_24_struct = pred_xyz_jts_24_struct.reshape(batch_size, num_hypo, 72)
-        pred_xyz_jts_17_flat = pred_xyz_jts_17.reshape(batch_size, num_hypo, 17 * 3)
-
-        transl = camera_root - output.joints.float().reshape(-1, 24, 3)[:, 0, :]
-
-        output = edict(
-            pred_phi=pred_phi.reshape(batch_size, num_hypo, 23, 2)[:, 0, :, :],
-            pred_delta_shape=delta_shape.reshape(batch_size, 10),
-            pred_shape=pred_shape.reshape(batch_size, num_hypo, 10)[:, 0, :],
-            pred_theta_mats=pred_theta_mats,
-            pred_uvd_jts=pred_uvd_jts_29.reshape(batch_size, num_hypo, -1),
-            pred_xyz_jts_29=pred_xyz_jts_29_flat,
-            pred_xyz_jts_24=pred_xyz_jts_24,
-            pred_xyz_jts_24_struct=pred_xyz_jts_24_struct,
-            pred_xyz_jts_17=pred_xyz_jts_17_flat,
-            pred_vertices=pred_vertices.reshape(batch_size, num_hypo, -1, 3),
-            # maxvals=maxvals,
-            cam_scale=camScale.reshape(batch_size, num_hypo, 1)[:, 0],
-            # cam_trans=camTrans[:, 0],
-            cam_root=camera_root.reshape(batch_size, num_hypo, 3)[:, 0, :],
-            transl=transl,
-            pred_camera=pred_camera.reshape(batch_size, 1),
-            sigma=sigma.reshape(batch_size, num_hypo, 29, 1)[:, 0, :, :],
-            scores=1 - sigma.reshape(batch_size, num_hypo, 29, 1)[:, 0, :, :],
-            # uvd_heatmap=torch.stack([hm_x0, hm_y0, hm_z0], dim=2),
-            # uvd_heatmap=heatmaps,
-            # img_feat=x0
-        )
-        return output
-
-    def forward_gt_theta(self, gt_theta, gt_beta):
-
-        output = self.smpl(
-            pose_axis_angle=gt_theta,
-            betas=gt_beta,
-            global_orient=None,
-            return_verts=True
-        )
-
         return output

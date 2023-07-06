@@ -84,7 +84,9 @@ parser.add_argument('--save-pt', default=False, dest='save_pt',
                     help='save prediction', action='store_true')
 parser.add_argument('--not-vis', default=False, dest='not_vis',
                     help='do not visualize', action='store_true')
-
+parser.add_argument('--hybrik_cam', default=False,
+                    help='use camera parameter predict by HybrIK, often gets better results under non-occlusion videos if set to be True', 
+                    type=bool)
 opt = parser.parse_args()
 
 
@@ -94,7 +96,6 @@ cfg = update_config(cfg_file)
 
 v_cfg_file = 'configs/NIKI-1stage.yaml'
 V_CKPT = 'exp/niki_model_28.pth'
-# V_CKPT = 'exp/niki_model_54.pth'
 v_cfg = update_config(v_cfg_file)
 
 
@@ -109,19 +110,15 @@ dummpy_set = edict({
 
 res_keys = [
     'pred_uvd',
-    'pred_xyz_17',
     'pred_xyz_29',
-    'pred_xyz_24_struct',
     'pred_scores',
     'pred_camera',
     'pred_sigma',
     'f',
     'pred_betas',
-    'pred_thetas',
     'pred_phi',
     'scale_mult',
     'pred_cam_root',
-    'features',
     'transl',
     'bbox',
     'height',
@@ -196,8 +193,8 @@ info['savepath2d'] = savepath2d
 
 write_stream = cv2.VideoWriter(
     *[info[k] for k in ['savepath', 'fourcc', 'fps', 'frameSize']])
-write2d_stream = cv2.VideoWriter(
-    *[info[k] for k in ['savepath2d', 'fourcc', 'fps', 'frameSize']])
+# write2d_stream = cv2.VideoWriter(
+#     *[info[k] for k in ['savepath2d', 'fourcc', 'fps', 'frameSize']])
 if not write_stream.isOpened():
     print("Try to use other video encoders...")
     ext = info['savepath'].split('.')[-1]
@@ -207,11 +204,11 @@ if not write_stream.isOpened():
     info['savepath2d'] = info['savepath2d'][:-4] + _ext
     write_stream = cv2.VideoWriter(
         *[info[k] for k in ['savepath', 'fourcc', 'fps', 'frameSize']])
-    write2d_stream = cv2.VideoWriter(
-        *[info[k] for k in ['savepath2d', 'fourcc', 'fps', 'frameSize']])
+    # write2d_stream = cv2.VideoWriter(
+    #     *[info[k] for k in ['savepath2d', 'fourcc', 'fps', 'frameSize']])
 
 assert write_stream.isOpened(), 'Cannot open video for writing'
-assert write2d_stream.isOpened(), 'Cannot open video for writing'
+# assert write2d_stream.isOpened(), 'Cannot open video for writing'
 
 os.system(f'ffmpeg -i {opt.video_name} {opt.out_dir}/raw_images/{video_basename}-%06d.png')
 
@@ -267,53 +264,35 @@ for img_path in tqdm(img_path_list, dynamic_ncols=True):
         pose_output = hybrik_model(
             pose_input, flip_test=opt.flip_test,
             bboxes=torch.from_numpy(np.array(bbox)).to(pose_input.device).unsqueeze(0).float(),
-            img_center=torch.from_numpy(img_center).to(pose_input.device).unsqueeze(0).float()
+            img_center=torch.from_numpy(img_center).to(pose_input.device).unsqueeze(0).float(),
+            do_hybrik=False
         )
-        uv_29 = pose_output.pred_uvd_jts.reshape(29, 3)[:, :2]
-        transl = pose_output.transl.detach()
 
         # === Save PT ===
         assert pose_input.shape[0] == 1, 'Only support single batch inference for now'
 
-        pred_xyz_jts_17 = pose_output.pred_xyz_jts_17.reshape(
-            17, 3).cpu().data.numpy()
         pred_uvd_jts = pose_output.pred_uvd_jts.reshape(
             -1, 3).cpu().data.numpy()
         pred_xyz_jts_29 = pose_output.pred_xyz_jts_29.reshape(
             -1, 3).cpu().data.numpy()
-        pred_xyz_jts_24_struct = pose_output.pred_xyz_jts_24_struct.reshape(
-            24, 3).cpu().data.numpy()
         pred_scores = pose_output.maxvals.cpu(
-        ).data[:, :29].reshape(29).numpy()
-        pred_camera = pose_output.pred_camera.squeeze(
-            dim=0).cpu().data.numpy()
+            ).data[:, :29].reshape(29).numpy()
         pred_betas = pose_output.pred_shape.squeeze(
-            dim=0).cpu().data.numpy()
-        pred_theta = pose_output.pred_theta_mats.squeeze(
             dim=0).cpu().data.numpy()
         pred_phi = pose_output.pred_phi.squeeze(dim=0).cpu().data.numpy()
         pred_cam_root = pose_output.cam_root.squeeze(dim=0).cpu().numpy()
         pred_sigma = pose_output.sigma.cpu().data.numpy()
 
         img_size = np.array((input_image.shape[1], input_image.shape[0]))
-        # print('img_size', img_size)
 
-        img_feat = pose_output.img_feat.detach().cpu().numpy()
-
-        res_db['pred_xyz_17'].append(pred_xyz_jts_17)
         res_db['pred_uvd'].append(pred_uvd_jts)
         res_db['pred_xyz_29'].append(pred_xyz_jts_29)
-        res_db['pred_xyz_24_struct'].append(pred_xyz_jts_24_struct)
         res_db['pred_scores'].append(pred_scores)
-        res_db['pred_camera'].append(pred_camera)
         res_db['pred_sigma'].append(pred_sigma)
         res_db['f'].append(1000.0)
         res_db['pred_betas'].append(pred_betas)
-        res_db['pred_thetas'].append(pred_theta)
         res_db['pred_phi'].append(pred_phi)
         res_db['pred_cam_root'].append(pred_cam_root)
-        res_db['features'].append(img_feat)
-        res_db['transl'].append(transl[0].cpu().data.numpy())
         res_db['bbox'].append(np.array(bbox))
         res_db['height'].append(img_size[1])
         res_db['width'].append(img_size[0])
@@ -352,14 +331,13 @@ mean_beta = res_db['pred_betas'].mean(axis=0)
 res_db['pred_betas'][:] = mean_beta
 
 update_bbox = v_cfg.get('update_bbox', False)
-USE_HYBRIK_CAM = True
+USE_HYBRIK_CAM = opt.hybrik_cam
 
 idx = 0
 for i in tqdm(range(0, total_img - seq_len + 1, seq_len), dynamic_ncols=True):
     pred_xyz_29 = res_db['pred_xyz_29'][i:i + seq_len, :, :] * 2.2
     pred_uv = res_db['pred_uvd'][i:i + seq_len, :, :2]
     pred_sigma = res_db['pred_sigma'][i:i + seq_len, :, :].squeeze(1)
-    pred_xyz_24_struct = res_db['pred_xyz_24_struct'][i:i + seq_len, :, :] * 2.2
     pred_beta = res_db['pred_betas'][i:i + seq_len, :]
     pred_phi = res_db['pred_phi'][i:i + seq_len, :]
     pred_cam_root = res_db['pred_cam_root'][i:i + seq_len, :]
@@ -376,15 +354,12 @@ for i in tqdm(range(0, total_img - seq_len + 1, seq_len), dynamic_ncols=True):
         'pred_xyz_29': pred_xyz_29,
         'pred_uv': pred_uv,
         'pred_sigma': pred_sigma,
-        'pred_xyz_24_struct': pred_xyz_24_struct,
         'pred_beta': pred_beta,
         'pred_phi': pred_phi,
         'pred_cam': pred_cam,
         'bbox': bbox_cs,
         'img_sizes': res_db['img_sizes'][i:i + seq_len, :]
     }
-
-    # print(res_db['img_sizes'][i:i + seq_len, :])
 
     for k in inp.keys():
         inp[k] = torch.from_numpy(inp[k]).float().cuda().unsqueeze(0)
@@ -452,22 +427,10 @@ for i in tqdm(range(total_img), dynamic_ncols=True):
     write_stream.write(image_vis)
 
 
-    occ_img_tmp = torch.from_numpy(image_vis) / 255.0
-    occ_img = occ_img_tmp.clone()
-    occ_img[:, :, 0] = occ_img_tmp[:, :, 2]
-    occ_img[:, :, 2] = occ_img_tmp[:, :, 0]
-    # occ_img = torch.from_numpy(input_img) / 255.0
-
-    pred_uv_now = video_res_db['pred_uv'][[i]] * bbox[2] + bbox[:2]
-    img_size = [input_image.shape[1], input_image.shape[0]]
-    pred_uv_now = pred_uv_now / torch.tensor(img_size, device=bbox.device) - 0.5
-
-
-
 res_db_path = os.path.join(f'./{opt.out_dir}/', f'{video_basename}.pt')
 joblib.dump(res_db, res_db_path)
 print('Prediction is saved in:', res_db_path)
 
 
 write_stream.release()
-write2d_stream.release()
+# write2d_stream.release()

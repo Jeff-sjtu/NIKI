@@ -93,10 +93,10 @@ class FlowRegressor(nn.Module):
         out = out.reshape(batch_size * seqlen, self.total_dim)
         inv_pred2rot6d = out[:, :24 * 6].contiguous().reshape(batch_size * seqlen, 24, 6)
         # z_e for error, z_s for shape
-        # inv_pred2ze = out[:, 24 * 6:-shape_dim]
         inv_pred2ze = out[:, -self.ze_dim:]
 
         if target is not None:
+            # only for training
             # ====== inverse pass: gt joints ======
             gt_jts29 = target['gt_xyz_29'].reshape(batch_size * seqlen, 29 * 3)
             gt_betas = target['gt_betas'].reshape(batch_size * seqlen, 10)
