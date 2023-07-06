@@ -84,7 +84,7 @@ parser.add_argument('--save-pt', default=False, dest='save_pt',
                     help='save prediction', action='store_true')
 parser.add_argument('--not-vis', default=False, dest='not_vis',
                     help='do not visualize', action='store_true')
-parser.add_argument('--hybrik_cam', default=False,
+parser.add_argument('--hybrik_cam', default=True,
                     help='use camera parameter predict by HybrIK, often gets better results under non-occlusion videos if set to be True', 
                     type=bool)
 opt = parser.parse_args()
@@ -112,14 +112,12 @@ res_keys = [
     'pred_uvd',
     'pred_xyz_29',
     'pred_scores',
-    'pred_camera',
     'pred_sigma',
     'f',
     'pred_betas',
     'pred_phi',
     'scale_mult',
     'pred_cam_root',
-    'transl',
     'bbox',
     'height',
     'width',
