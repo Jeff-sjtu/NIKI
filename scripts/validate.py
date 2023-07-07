@@ -72,7 +72,6 @@ def main():
     print(img_feat_size)
 
     valid_dataset_pred_pw3d = naive_dataset_temporal(opt.DATASET.valid_paths['3dpw_xocc'], '', dataset_name='pw3d', train=False, usage='xyz', occlusion=data_occ, seq_len=opt.seq_len)
-
     valid_dataset_pred_h36m_noocc = naive_dataset_temporal(opt.DATASET.valid_paths['h36m'], '', dataset_name='h36m', train=False, usage='xyz', occlusion=False, seq_len=opt.seq_len)
     valid_dataset_pred_pw3d_noocc = naive_dataset_temporal(opt.DATASET.valid_paths['3dpw'], '', dataset_name='pw3d', train=False, usage='xyz', occlusion=False, seq_len=opt.seq_len)
 
@@ -110,15 +109,8 @@ def main():
 
     with torch.no_grad():
 
-        # print('====== Evaluate 3DOH ======')
-        # valid(valid_dataset_pred_3doh, valid_loader_pred_3doh, logger, model=model, name='3dpw')
-
-        # print('====== Evaluate 3DPW OCC ======')
-        # valid(valid_dataset_pred_pw3docc, valid_loader_pred_pw3docc, logger, model=model, name='3dpw')
-
         print('====== Evaluate 3DPW XOCC ======')
         valid(valid_dataset_pred_pw3d, valid_loader_pred_pw3d, logger, model=model, name='3dpw-xocc')
-        # valid_gt(valid_dataset_pred_pw3d, valid_loader_pred_pw3d, logger, model=model)
 
         print('====== Evaluate Human3.6M ======')
         valid(valid_dataset_pred_h36m_noocc, valid_loader_pred_h36m_noocc, logger, model=model, name='h36m')
@@ -127,7 +119,7 @@ def main():
         valid(valid_dataset_pred_pw3d_noocc, valid_loader_pred_pw3d_noocc, logger, model=model, name='3dpw')
 
 
-def valid(valid_dataset, valid_loader, logger, model, corr_test=False, name=''):
+def valid(valid_dataset, valid_loader, logger, model, name=''):
 
     smpl_layer.eval()
     model.eval()
@@ -146,12 +138,8 @@ def valid(valid_dataset, valid_loader, logger, model, corr_test=False, name=''):
     target_uv_24s_weights = []
 
     diff_verts = []
-    diff_jts = []
-    pred_zes = []
 
     for item in tqdm(valid_loader, dynamic_ncols=True):
-        # item = reproject_uv(item)
-
         # get input
         inp = {
             'pred_xyz_29': item['pred_xyz_29'],  # batch x time_seq x 29 x 3
@@ -171,34 +159,12 @@ def valid(valid_dataset, valid_loader, logger, model, corr_test=False, name=''):
         with torch.no_grad():
             output = model(inp=inp)
 
-        # output = smpl_layer.hybrik(
-        #     pose_skeleton=item['pred_xyz_29'].reshape(-1, 29, 3).cuda(),
-        #     betas=item['pred_betas'].reshape(-1, 10).cuda(),
-        #     phis=item['pred_phi'].reshape(-1, 23, 2).cuda(),
-        #     global_orient=None,
-        #     return_verts=False,
-        #     return_29_jts=True
-        # )
-        # output['pred_xyz_29'] = item['pred_xyz_29'].cuda()
-        # output['pred_xyz_29_struct'] = output['joints']
-        # output['pred_xyz_17'] = output['joints_from_verts']
-        # output['pred_beta'] = item['pred_betas'].cuda()
-        # output['pred_cam'] = item['pred_cam'].cuda()
-        # output['pred_phi'] = item['pred_phi'].cuda()
-
         torch.set_grad_enabled(False)
 
         pred_xyz_29 = output['pred_xyz_29']
         pred_beta = output['pred_beta'].detach()
         pred_phi = output['pred_phi'].detach().cuda()
-        # pred_beta = item['betas'].cuda()
-        # pred_phi = item['phi'].cuda()
         pred_cam = output['pred_cam'].detach()
-
-        # gt_cam_scale = item['gt_cam_scale'].reshape(-1, 4).cuda()
-        # cam_err = torch.abs(gt_cam_scale[:, 0] - para_out['pred_cam'][:, 0]).mean()
-        # gt_beta = item['gt_betas'].reshape(-1, 10).cuda()
-        # beta_err = torch.abs(gt_beta - pred_beta).mean(dim=0)
 
         if 'pred_xyz_17' in output.keys():
             pred_xyz_17 = output.pred_xyz_17
@@ -244,24 +210,6 @@ def valid(valid_dataset, valid_loader, logger, model, corr_test=False, name=''):
         gt_vert = gt_output['vertices'].cpu().numpy()
 
         diff_vert = np.sqrt(np.sum((pred_vert - gt_vert) ** 2, axis=2)).mean(axis=1)
-
-        if corr_test:
-            # gt_jt = item['gt_xyz_17'].reshape(batch_size * time_seq, 17, 3).numpy()
-            gt_jt = item['gt_xyz_29'].reshape(batch_size * time_seq, 29, 3).numpy()
-            gt_jt = gt_jt - gt_jt[:, [0], :]
-            # pred_jt = pred_xyz_17.reshape(batch_size * time_seq, 17, 3).float().cpu().numpy()
-            pred_jt = pred_xyz29_struct.reshape(batch_size * time_seq, 29, 3)
-            # pred_jt = item['pred_xyz_29'].reshape(batch_size * time_seq, 29, 3).float().cpu().numpy()
-            pred_jt = pred_jt - pred_jt[:, [0], :]
-            diff_jt = np.sqrt(np.sum((pred_jt - gt_jt) ** 2, axis=2)).mean(axis=1)
-
-            pred_ze_swing = output.inv_pred2zes.reshape(batch_size * time_seq, 32).float().cpu().numpy()
-            pred_ze_twist = output.inv_pred2zet.reshape(batch_size * time_seq, 46).float().cpu().numpy()
-
-            ze = np.abs(pred_ze_swing).mean(axis=1) + np.abs(pred_ze_twist).mean(axis=1)
-            diff_jts.append(diff_jt)
-            pred_zes.append(ze)
-
         pred_xyz_17s.append(pred_xyz_17.reshape(batch_size * time_seq, 17, 3).float().cpu().numpy())
         pred_xyz_29s.append(pred_xyz_29.reshape(batch_size * time_seq, 29, 3).float().cpu().numpy())
         pred_xyz_29s_struct.append(pred_xyz29_struct.reshape(batch_size * time_seq, 29, 3))
@@ -274,21 +222,6 @@ def valid(valid_dataset, valid_loader, logger, model, corr_test=False, name=''):
         # print(cam_err, beta_err)
 
     diff_verts = np.concatenate(diff_verts, axis=0)
-
-    if corr_test:
-        diff_jts = np.concatenate(diff_jts, axis=0)
-        pred_zes = np.concatenate(pred_zes, axis=0)
-
-        file_name = name + '_corr.npy'
-        with open(file_name, 'wb') as fid:
-            np.save(
-                fid,
-                {
-                    'diff': diff_jts,
-                    'ze': pred_zes
-                })
-        coeff = np.corrcoef(diff_jts, pred_zes)
-        print('COEFF', coeff)
 
     pred_xyz_17s = np.concatenate(pred_xyz_17s, axis=0)
     pred_xyz_29s = np.concatenate(pred_xyz_29s, axis=0)

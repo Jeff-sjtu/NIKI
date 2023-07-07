@@ -9,7 +9,7 @@ from niki.datasets.naive_dataset_temporal import (
     mix_temporal_dataset_full_wamass, mix_temporal_dataset_full_woamass,
     mix_temporal_dataset_full_wocc, mix_temporal_dataset_wamass,
     naive_dataset_temporal,
-    mix_temporal_dataset_full_wcoco_new)
+    mix_temporal_dataset_full_wcoco)
 
 from niki.models.criterionTS import LossTS
 
@@ -155,14 +155,11 @@ def main():
     elif opt.DATASET.name == 'wo_hp3d_w_amass':
         train_dataset = mix_temporal_dataset_wamass(
             opt.DATASET.train_paths, none_paths, opt=opt, train=True, usage='xyz', occlusion=data_occ, img_feat_size=img_feat_size)
-    elif opt.DATASET.name == 'w_hp3d_w_amass':
-        train_dataset = mix_temporal_dataset_full_wamass(
-            opt.DATASET.train_paths, none_paths, opt=opt, train=True, usage='xyz', occlusion=data_occ, img_feat_size=img_feat_size)
     elif opt.DATASET.name == 'w_hp3d':
         train_dataset = mix_temporal_dataset_full_woamass(
             opt.DATASET.train_paths, none_paths, opt=opt, train=True, usage='xyz', occlusion=data_occ, img_feat_size=img_feat_size)
     elif opt.DATASET.name == 'w_coco':
-        train_dataset = mix_temporal_dataset_full_wcoco_new(
+        train_dataset = mix_temporal_dataset_full_wcoco(
             opt.DATASET.train_paths, none_paths, opt=opt, train=True, usage='xyz', occlusion=data_occ, img_feat_size=img_feat_size)
     elif opt.DATASET.name == 'wocc':
         train_dataset = mix_temporal_dataset_full_wocc(
@@ -175,7 +172,6 @@ def main():
         opt.DATASET.valid_paths['h36m_xocc'], '', dataset_name='h36m', train=False, usage='xyz', occlusion=data_occ, seq_len=opt.seq_len)
     if gendered_smpl:
         pass
-        # valid_dataset_pred_pw3d = naive_dataset_temporal_gendered(opt.DATASET.valid_paths[1], '', dataset_name='pw3d', train=False, usage='xyz', occlusion=data_occ, seq_len=opt.seq_len)
     elif opt.DATASET.name == 'w_3doh':
         valid_dataset_pred_pw3d = naive_dataset_temporal(
             opt.DATASET.valid_paths['3dpw_xocc'], '', dataset_name='pw3d', train=False, usage='xyz', occlusion=False, seq_len=opt.seq_len)
