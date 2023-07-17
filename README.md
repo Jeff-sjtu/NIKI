@@ -51,6 +51,8 @@ conda install -c fvcore -c iopath -c conda-forge fvcore iopath
 conda install -c bottler nvidiacub
 pip install git+ssh://git@github.com/facebookresearch/pytorch3d.git
 
+pip install -r requirements.txt
+
 # 4. Pull our code
 git clone git@github.com:Jeff-sjtu/NIKI.git
 cd NIKI
@@ -73,6 +75,12 @@ python scripts/train.py --cfg configs/NIKI-ts.yaml --exp-id niki-ts
 ## Evaluation
 ``` bash
 python scripts/validate.py --cfg configs/NIKI-ts.yaml --ckpt niki-ts.pth
+```
+
+## Demo
+Download pretrained HybrIK and Single-stage NIKI models from [onedrive link](https://sjtueducn-my.sharepoint.com/:f:/g/personal/biansiyuan_sjtu_edu_cn/EtGnxMf0bkpPhB8OPecnzhoBbKzgXrhyVguV_B5g4r8_rQ?e=UGDdRJ), and put them in ``exp/`` folder.
+``` bash
+python scripts/demo.py --video-name {VIDEO-PATH} -out-dir {OUTPUT-DIR}
 ```
 
 

@@ -1,0 +1,20 @@
+model_name: 'FlowIK_camnet'
+criterion_name: 'LossFlowIKCam'
+exp_id: 'Flow_occ'
+pretrained: ''
+pretrained_strict: False
+start_epoch: 21
+DATASET:
+  name: 'w_wo_occ'
+  occlusion: True
+  train_paths:
+    - ''
+  valid_paths:
+    - ''
+train_batch: 64
+num_workers: 8
+seq_len: 16
+learnable_emb: True
+lr_steps:
+  - 25
+  - 40

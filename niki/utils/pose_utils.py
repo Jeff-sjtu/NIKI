@@ -235,85 +235,49 @@ def calc_cam_scale_trans_refined1(xyz_29, uv_29, uvd_weight, img_center):
     return out, 1.0, diff
 
 
-def calc_cam_scale_trans(xyz_29, uvd_29, uvd_weight):
+def calc_cam_scale_trans(xyz_29, uv_29, uvd_weight, f=1000.0, img_center=None):
 
-    assert np.absolute(xyz_29[:, 2] - uvd_29[:, 2]
-                       ).sum() < 0.01, f'{xyz_29[:, 2]}, {uvd_29[:, 2]}'
-
-    xy_29 = xyz_29[:, :2].copy()
-    uv_29 = uvd_29[:, :2].copy()
-    # uv_weight = uvd_weight[:, :2].copy()
-    uv_weight = np.ones_like(uvd_weight[:, :2])
-
-    xy_29 = xy_29 * uv_weight
-    uv_29 = uv_29 * uv_weight
-
-    xy_29_mean = np.sum(xy_29, axis=0) / uv_weight.sum(axis=0)
-    uv_29_mean = np.sum(uv_29, axis=0) / uv_weight.sum(axis=0)
-
-    assert uv_weight.sum() > 2
-
-    if uv_weight.sum() > 2:
-        x_29_zero_center = ((xy_29 - xy_29_mean) * uv_weight)[:, 0]
-        u_29_zero_center = ((uv_29 - uv_29_mean) * uv_weight)[:, 0]
-
-        y_29_zero_center = ((xy_29 - xy_29_mean) * uv_weight)[:, 1]
-        v_29_zero_center = ((uv_29 - uv_29_mean) * uv_weight)[:, 1]
-
-        x_var = (x_29_zero_center * x_29_zero_center).sum() / \
-            uv_weight[:, 0].sum()
-        u_var = (u_29_zero_center * u_29_zero_center).sum() / \
-            uv_weight[:, 0].sum()
-
-        y_var = (y_29_zero_center * y_29_zero_center).sum() / \
-            uv_weight[:, 1].sum()
-        v_var = (v_29_zero_center * v_29_zero_center).sum() / \
-            uv_weight[:, 1].sum()
-
-        scale = (np.sqrt(x_var) / np.sqrt(u_var) +
-                 np.sqrt(y_var) / np.sqrt(v_var)) * 0.5
-    else:
-        print('bug, bug')
-        scale = 1
-
-    trans = xy_29_mean - uv_29_mean * scale
-    # trans = xy_29[0] - uv_29[0]*scale
-
-    # assert np.absolute(uv_29 * scale + trans - xy_29).sum() < 0.01, f'{uv_29 * scale + trans}, {xy_29}, {(uv_29 * scale + trans - xy_29)}'
-
-    return scale, trans
-
-
-def calc_cam_scale_trans_const_scale(xyz_29, uv_29, uvd_weight, scale, f=1000.0):
-    # do not take into account 2.2
-    # the equation to be solved:
+    # the equation to be solved: 
     # u * 256 / f * (z + f/256 * 1/scale) = x + tx
     # v * 256 / f * (z + f/256 * 1/scale) = y + ty
 
-    weight = (uvd_weight.sum(axis=-1, keepdims=True) >= 3.0) * 1.0  # 24 x 1
+    weight = (uvd_weight.sum(axis=-1, keepdims=True) >= 3.0) * 1.0 # 24 x 1
+    # assert weight.sum() >= 2, 'too few valid keypoints to calculate cam para'
 
-    if weight.sum() < 1:
-        return np.zeros(2), 0, -1
+    if weight.sum() < 2:
+        # print('bad data')
+        return np.zeros(3), 0.0, -1
 
-    tx_s = uv_29[:, 0] * 256.0 / f * \
-        (xyz_29[:, 2] + f / 256.0 / scale) - xyz_29[:, 0]
-    ty_s = uv_29[:, 1] * 256.0 / f * \
-        (xyz_29[:, 2] + f / 256.0 / scale) - xyz_29[:, 1]
+    num_joints = len(uv_29)
 
-    # print(tx_s * weight[:, 0], ty_s * weight[:, 0])
+    Ax = np.zeros((num_joints, 3))
+    Ax[:, 1] = -1
+    Ax[:, 0] = uv_29[:, 0]
 
-    tx = (tx_s * weight[:, 0]).sum() / weight[:, 0].sum()
-    ty = (ty_s * weight[:, 0]).sum() / weight[:, 0].sum()
+    Ay = np.zeros((num_joints, 3))
+    Ay[:, 2] = -1
+    Ay[:, 0] = uv_29[:, 1]
 
-    target_camera = np.array([scale, tx, ty])
+    Ax = Ax * weight
+    Ay = Ay * weight
 
-    backed_projected_xyz = back_projection(uv_29, xyz_29, target_camera, f)
+    A = np.concatenate([Ax, Ay], axis=0)
 
-    diff = np.sum((backed_projected_xyz - xyz_29)**2, axis=-1) * weight[:, 0]
-    diff = np.sqrt(diff).sum() / (weight.sum() + 1e-6) * \
-        1000  # roughly mpjpe > 70
+    bx = (xyz_29[:, 0] - 256 * uv_29[:, 0] / f * xyz_29[:, 2]) * weight[:, 0]
+    by = (xyz_29[:, 1] - 256 * uv_29[:, 1] / f * xyz_29[:, 2]) * weight[:, 0]
+    b = np.concatenate([bx, by], axis=0)
 
-    return np.array([tx, ty]), 1.0, diff
+    A_s = np.dot(A.T, A)
+    b_s = np.dot(A.T, b)
+
+    cam_para = np.linalg.solve(A_s, b_s)
+
+    trans = cam_para[1:]
+    scale = 1.0 / cam_para[0]
+
+    scale_trans = np.array([scale, trans[0], trans[1]])
+
+    return scale_trans, 1.0, 0.0
 
 
 def back_projection(uvd, xyz, pred_camera, focal_length=5000.):

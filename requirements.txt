@@ -1,0 +1,10 @@
+easydict
+opencv-python
+cython
+matplotlib
+terminaltables
+six
+pycocotools
+joblib
+scipy
+threadpoolctl
